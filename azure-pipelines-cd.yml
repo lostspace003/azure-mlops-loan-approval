@@ -1,0 +1,139 @@
+# azure-pipelines-cd.yml
+trigger: none  # Triggered by CI pipeline or manual
+
+resources:
+  pipelines:
+    - pipeline: ci-pipeline
+      source: 'CI-Pipeline'
+      trigger:
+        branches:
+          include:
+            - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - name: SUBSCRIPTION_ID
+    value: '<your-subscription-id>'
+  - name: RESOURCE_GROUP
+    value: 'rg-mlops-loan-approval'
+  - name: WORKSPACE_NAME
+    value: 'mlw-loan-approval'
+  - name: ENDPOINT_NAME
+    value: 'loan-approval-endpoint'
+
+stages:
+  - stage: Deploy_Staging
+    displayName: 'Deploy to Staging'
+    jobs:
+      - deployment: DeployStaging
+        displayName: 'Deploy Green (Staging)'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: '3.9'
+
+                - script: pip install azure-ai-ml azure-identity
+                  displayName: 'Install SDK'
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy Green Deployment'
+                  inputs:
+                    azureSubscription: 'azure-ml-connection'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      python -c "
+                      from azure.ai.ml import MLClient
+                      from azure.ai.ml.entities import ManagedOnlineDeployment
+                      from azure.identity import DefaultAzureCredential
+
+                      ml = MLClient(DefaultAzureCredential(),
+                          '$(SUBSCRIPTION_ID)', '$(RESOURCE_GROUP)', '$(WORKSPACE_NAME)')
+                      model = ml.models.get('loan-approval-model', label='latest')
+
+                      deployment = ManagedOnlineDeployment(
+                          name='green',
+                          endpoint_name='$(ENDPOINT_NAME)',
+                          model=model.id,
+                          instance_type='Standard_DS2_v2',
+                          instance_count=1,
+                      )
+                      ml.online_deployments.begin_create_or_update(deployment).result()
+                      print('Green deployment created.')"
+
+  - stage: Smoke_Test
+    displayName: 'Smoke Test Staging'
+    dependsOn: Deploy_Staging
+    jobs:
+      - job: SmokeTest
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Run Smoke Tests'
+            inputs:
+              azureSubscription: 'azure-ml-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                pip install azure-ai-ml azure-identity
+                python -c "
+                import json
+                from azure.ai.ml import MLClient
+                from azure.identity import DefaultAzureCredential
+
+                ml = MLClient(DefaultAzureCredential(),
+                    '$(SUBSCRIPTION_ID)', '$(RESOURCE_GROUP)', '$(WORKSPACE_NAME)')
+
+                sample = {'input_data': {'columns': ['Age','Income','LoanAmount','CreditScore','EmploymentYears','DebtToIncomeRatio','NumCreditLines','Education','MaritalStatus','HasMortgage','HasDependents','LoanPurpose','PreviousDefault'], 'data': [[35,85000,250000,720,8,0.32,5,1,1,1,1,0,0]]}}
+                response = ml.online_endpoints.invoke(
+                    endpoint_name='$(ENDPOINT_NAME)',
+                    deployment_name='green',
+                    request=json.dumps(sample))
+                result = json.loads(response)
+
+                assert isinstance(result, list), 'Expected list response'
+                assert result[0] in [0, 1], 'Invalid prediction value'
+                print(f'Smoke test PASSED: prediction={result[0]}')"
+
+  - stage: Promote_Production
+    displayName: 'Promote to Production'
+    dependsOn: Smoke_Test
+    jobs:
+      - deployment: PromoteProduction
+        displayName: 'Switch Traffic to Green'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: 'Route Traffic to Green + Cleanup'
+                  inputs:
+                    azureSubscription: 'azure-ml-connection'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      pip install azure-ai-ml azure-identity
+                      python -c "
+                      from azure.ai.ml import MLClient
+                      from azure.ai.ml.entities import ManagedOnlineEndpoint
+                      from azure.identity import DefaultAzureCredential
+
+                      ml = MLClient(DefaultAzureCredential(),
+                          '$(SUBSCRIPTION_ID)', '$(RESOURCE_GROUP)', '$(WORKSPACE_NAME)')
+
+                      endpoint = ml.online_endpoints.get('$(ENDPOINT_NAME)')
+                      endpoint.traffic = {'green': 100, 'blue': 0}
+                      ml.online_endpoints.begin_create_or_update(endpoint).result()
+
+                      # Remove old blue deployment
+                      try:
+                          ml.online_deployments.begin_delete(
+                              name='blue', endpoint_name='$(ENDPOINT_NAME)').result()
+                      except: pass
+                      print('Production traffic now 100% on green.')"

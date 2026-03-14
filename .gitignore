@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/loan_applications.csv
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.claude/
