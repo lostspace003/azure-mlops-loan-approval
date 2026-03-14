@@ -1,16 +1,13 @@
 # pipelines/training_pipeline.py
 import os
-from azure.ai.ml import MLClient, Input, Output, command, dsl
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from config import get_ml_client, get_azure_config
+from azure.ai.ml import Input, Output, command, dsl
 from azure.ai.ml.entities import Environment
-from azure.identity import DefaultAzureCredential
 
-credential = DefaultAzureCredential()
-ml_client = MLClient(
-    credential=credential,
-    subscription_id=os.environ.get('SUBSCRIPTION_ID', '<your-subscription-id>'),
-    resource_group_name=os.environ.get('RESOURCE_GROUP', 'rg-mlops-loan-approval'),
-    workspace_name=os.environ.get('WORKSPACE_NAME', 'mlw-loan-approval'),
-)
+ml_client = get_ml_client()
+cfg = get_azure_config()
 
 # Create custom environment
 env = Environment(
@@ -93,11 +90,6 @@ register_component = command(
             '--model_input ${{inputs.model_input}} '
             '--evaluation_output ${{inputs.evaluation_output}}',
     environment=f'{env.name}:{env.version}',
-    environment_variables={
-        'SUBSCRIPTION_ID': os.environ.get('SUBSCRIPTION_ID', '<your-subscription-id>'),
-        'RESOURCE_GROUP': os.environ.get('RESOURCE_GROUP', 'rg-mlops-loan-approval'),
-        'WORKSPACE_NAME': os.environ.get('WORKSPACE_NAME', 'mlw-loan-approval'),
-    },
 )
 
 
