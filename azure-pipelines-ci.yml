@@ -14,11 +14,11 @@ pool:
 
 variables:
   - name: SUBSCRIPTION_ID
-    value: '<your-subscription-id>'
+    value: '2f55ca6d-7f38-4220-919c-591a66eb1a2b'
   - name: RESOURCE_GROUP
     value: 'rg-mlops-loan-approval'
   - name: WORKSPACE_NAME
-    value: 'mlw-loan-approval'
+    value: 'mlw-loan-approval-v2'
   - name: python.version
     value: '3.9'
 

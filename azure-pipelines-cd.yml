@@ -15,11 +15,11 @@ pool:
 
 variables:
   - name: SUBSCRIPTION_ID
-    value: '<your-subscription-id>'
+    value: '2f55ca6d-7f38-4220-919c-591a66eb1a2b'
   - name: RESOURCE_GROUP
     value: 'rg-mlops-loan-approval'
   - name: WORKSPACE_NAME
-    value: 'mlw-loan-approval'
+    value: 'mlw-loan-approval-v2'
   - name: ENDPOINT_NAME
     value: 'loan-approval-endpoint'
 
@@ -135,5 +135,6 @@ stages:
                       try:
                           ml.online_deployments.begin_delete(
                               name='blue', endpoint_name='$(ENDPOINT_NAME)').result()
-                      except: pass
+                      except Exception as e:
+                          print(f'Note: could not delete blue deployment: {e}')
                       print('Production traffic now 100% on green.')"

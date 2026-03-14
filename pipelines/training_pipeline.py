@@ -1,21 +1,22 @@
 # pipelines/training_pipeline.py
+import os
 from azure.ai.ml import MLClient, Input, Output, command, dsl
-from azure.ai.ml.entities import Environment, BuildContext
+from azure.ai.ml.entities import Environment
 from azure.identity import DefaultAzureCredential
 
 credential = DefaultAzureCredential()
 ml_client = MLClient(
     credential=credential,
-    subscription_id="<your-subscription-id>",
-    resource_group_name="rg-mlops-loan-approval",
-    workspace_name="mlw-loan-approval"
+    subscription_id=os.environ.get('SUBSCRIPTION_ID', '<your-subscription-id>'),
+    resource_group_name=os.environ.get('RESOURCE_GROUP', 'rg-mlops-loan-approval'),
+    workspace_name=os.environ.get('WORKSPACE_NAME', 'mlw-loan-approval'),
 )
 
 # Create custom environment
 env = Environment(
     name="loan-approval-env",
     conda_file="./environments/conda.yml",
-    image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest"
+    image="mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:latest",
 )
 env = ml_client.environments.create_or_update(env)
 
@@ -25,11 +26,11 @@ data_prep_component = command(
     display_name="Data Preparation",
     inputs={
         'input_data': Input(type='uri_file'),
-        'test_size': Input(type='number', default=0.2)
+        'test_size': Input(type='number', default=0.2),
     },
     outputs={
         'train_data': Output(type='uri_folder'),
-        'test_data': Output(type='uri_folder')
+        'test_data': Output(type='uri_folder'),
     },
     code='./src/data_prep/',
     command='python data_prep.py '
@@ -47,10 +48,10 @@ train_component = command(
         'train_data': Input(type='uri_folder'),
         'n_estimators': Input(type='integer', default=100),
         'learning_rate': Input(type='number', default=0.1),
-        'max_depth': Input(type='integer', default=5)
+        'max_depth': Input(type='integer', default=5),
     },
     outputs={
-        'model_output': Output(type='uri_folder')
+        'model_output': Output(type='uri_folder'),
     },
     code='./src/train/',
     command='python train.py '
@@ -67,10 +68,10 @@ evaluate_component = command(
     display_name="Model Evaluation",
     inputs={
         'model_input': Input(type='uri_folder'),
-        'test_data': Input(type='uri_folder')
+        'test_data': Input(type='uri_folder'),
     },
     outputs={
-        'evaluation_output': Output(type='uri_folder')
+        'evaluation_output': Output(type='uri_folder'),
     },
     code='./src/evaluate/',
     command='python evaluate.py '
@@ -85,7 +86,7 @@ register_component = command(
     display_name="Model Registration",
     inputs={
         'model_input': Input(type='uri_folder'),
-        'evaluation_output': Input(type='uri_folder')
+        'evaluation_output': Input(type='uri_folder'),
     },
     code='./src/register/',
     command='python register.py '
@@ -93,9 +94,9 @@ register_component = command(
             '--evaluation_output ${{inputs.evaluation_output}}',
     environment=f'{env.name}:{env.version}',
     environment_variables={
-        'SUBSCRIPTION_ID': '<your-subscription-id>',
-        'RESOURCE_GROUP': 'rg-mlops-loan-approval',
-        'WORKSPACE_NAME': 'mlw-loan-approval'
+        'SUBSCRIPTION_ID': os.environ.get('SUBSCRIPTION_ID', '<your-subscription-id>'),
+        'RESOURCE_GROUP': os.environ.get('RESOURCE_GROUP', 'rg-mlops-loan-approval'),
+        'WORKSPACE_NAME': os.environ.get('WORKSPACE_NAME', 'mlw-loan-approval'),
     },
 )
 
@@ -111,15 +112,15 @@ def loan_approval_pipeline(input_data, test_size=0.2):
     train = train_component(train_data=prep.outputs.train_data)
     evaluate = evaluate_component(
         model_input=train.outputs.model_output,
-        test_data=prep.outputs.test_data
+        test_data=prep.outputs.test_data,
     )
     register = register_component(
         model_input=train.outputs.model_output,
-        evaluation_output=evaluate.outputs.evaluation_output
+        evaluation_output=evaluate.outputs.evaluation_output,
     )
     return {
         'model': train.outputs.model_output,
-        'metrics': evaluate.outputs.evaluation_output
+        'metrics': evaluate.outputs.evaluation_output,
     }
 
 

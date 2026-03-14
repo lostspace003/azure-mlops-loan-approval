@@ -1,14 +1,7 @@
 # verify_datastore.py
-from azure.ai.ml import MLClient
-from azure.identity import DefaultAzureCredential
+from config import get_ml_client
 
-credential = DefaultAzureCredential()
-ml_client = MLClient(
-    credential=credential,
-    subscription_id="<your-subscription-id>",
-    resource_group_name="rg-mlops-loan-approval",
-    workspace_name="mlw-loan-approval"
-)
+ml_client = get_ml_client()
 
 # List all datastores in the workspace
 for ds in ml_client.datastores.list():

@@ -1,11 +1,13 @@
 # src/train/train.py
-import argparse, os, json
+import argparse
+import os
+import json
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.metrics import (accuracy_score, precision_score,
-    recall_score, f1_score, roc_auc_score, classification_report)
-import mlflow, mlflow.sklearn
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+import mlflow
+import mlflow.sklearn
 
 
 def main():
@@ -34,12 +36,17 @@ def main():
     )
     model.fit(X_train, y_train)
 
-    # Log training accuracy
-    train_acc = accuracy_score(y_train, model.predict(X_train))
+    # Log training metrics
+    y_pred = model.predict(X_train)
+    train_acc = accuracy_score(y_train, y_pred)
+    train_f1 = f1_score(y_train, y_pred)
+    train_auc = roc_auc_score(y_train, model.predict_proba(X_train)[:, 1])
     mlflow.log_metric('train_accuracy', train_acc)
+    mlflow.log_metric('train_f1', train_f1)
+    mlflow.log_metric('train_auc_roc', train_auc)
 
     # Log feature importance
-    importance = dict(zip(X_train.columns, model.feature_importances_))
+    importance = dict(zip(X_train.columns.tolist(), model.feature_importances_.tolist()))
     mlflow.log_dict(importance, 'feature_importance.json')
 
     # Save model
@@ -47,7 +54,7 @@ def main():
     mlflow.sklearn.save_model(model, args.model_output)
 
     mlflow.end_run()
-    print(f"Training accuracy: {train_acc:.4f}")
+    print(f"Training accuracy: {train_acc:.4f}, F1: {train_f1:.4f}, AUC: {train_auc:.4f}")
 
 
 if __name__ == '__main__':

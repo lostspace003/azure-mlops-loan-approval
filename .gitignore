@@ -8,3 +8,6 @@ data/loan_applications.csv
 dist/
 build/
 .claude/
+htmlcov/
+.coverage
+*.log

@@ -1,25 +1,18 @@
 # deploy_endpoint.py
-from azure.ai.ml import MLClient
 from azure.ai.ml.entities import (
     ManagedOnlineEndpoint,
-    ManagedOnlineDeployment
+    ManagedOnlineDeployment,
 )
-from azure.identity import DefaultAzureCredential
+from config import get_ml_client
 
-credential = DefaultAzureCredential()
-ml_client = MLClient(
-    credential=credential,
-    subscription_id="<your-subscription-id>",
-    resource_group_name="rg-mlops-loan-approval",
-    workspace_name="mlw-loan-approval"
-)
+ml_client = get_ml_client()
 
 # Create endpoint
 endpoint_name = "loan-approval-endpoint"
 endpoint = ManagedOnlineEndpoint(
     name=endpoint_name,
     description="Real-time loan approval predictions",
-    auth_mode="key"
+    auth_mode="key",
 )
 ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 print(f"Endpoint '{endpoint_name}' created.")

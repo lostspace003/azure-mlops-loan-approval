@@ -1,9 +1,14 @@
 # src/evaluate/evaluate.py
-import argparse, os, json
+import argparse
+import os
+import json
 import pandas as pd
-import mlflow, mlflow.sklearn
-from sklearn.metrics import (accuracy_score, precision_score,
-    recall_score, f1_score, roc_auc_score)
+import mlflow
+import mlflow.sklearn
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score,
+    f1_score, roc_auc_score, confusion_matrix, classification_report
+)
 
 
 def main():
@@ -26,17 +31,32 @@ def main():
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
 
+    accuracy = accuracy_score(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
+
     metrics = {
-        'accuracy': accuracy_score(y_test, y_pred),
+        'accuracy': accuracy,
         'precision': precision_score(y_test, y_pred),
         'recall': recall_score(y_test, y_pred),
         'f1_score': f1_score(y_test, y_pred),
         'auc_roc': roc_auc_score(y_test, y_prob),
-        'passed_threshold': accuracy_score(y_test, y_pred) >= args.accuracy_threshold
+        'true_negatives': int(cm[0][0]),
+        'false_positives': int(cm[0][1]),
+        'false_negatives': int(cm[1][0]),
+        'true_positives': int(cm[1][1]),
+        'passed_threshold': accuracy >= args.accuracy_threshold,
     }
 
     for k, v in metrics.items():
-        mlflow.log_metric(k, v if isinstance(v, (int, float)) else int(v))
+        if isinstance(v, bool):
+            mlflow.log_metric(k, int(v))
+        elif isinstance(v, (int, float)):
+            mlflow.log_metric(k, v)
+
+    # Log classification report
+    report = classification_report(y_test, y_pred, target_names=['Denied', 'Approved'])
+    print(report)
+    mlflow.log_text(report, 'classification_report.txt')
 
     # Save evaluation results
     os.makedirs(args.evaluation_output, exist_ok=True)
@@ -46,7 +66,7 @@ def main():
     mlflow.end_run()
     print(f"Test Accuracy: {metrics['accuracy']:.4f}")
     print(f"AUC-ROC: {metrics['auc_roc']:.4f}")
-    print(f"Passed threshold: {metrics['passed_threshold']}")
+    print(f"Passed threshold ({args.accuracy_threshold}): {metrics['passed_threshold']}")
 
 
 if __name__ == '__main__':

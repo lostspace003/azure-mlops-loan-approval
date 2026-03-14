@@ -2,27 +2,22 @@
 import pyodbc
 import random
 import numpy as np
+from config import get_sql_connection_string
 
 # Set seed for reproducible data across all learners
 random.seed(42)
 np.random.seed(42)
 
-# Connection string
-conn_str = (
-    "Driver={ODBC Driver 18 for SQL Server};"
-    "Server=tcp:<your-sql-server>.database.windows.net,1433;"
-    "Database=sqldb-loan-data;"
-    "Uid=sqladmin;"
-    "Pwd=MLOps@2026Secure!;"
-    "Encrypt=yes;"
-    "TrustServerCertificate=False;"
-    "Connection Timeout=30;"
-)
-
+conn_str = get_sql_connection_string()
 conn = pyodbc.connect(conn_str)
 cursor = conn.cursor()
 
-# Create table
+# Drop table if it already exists, then create
+cursor.execute("""
+    IF OBJECT_ID('LoanApplications', 'U') IS NOT NULL
+        DROP TABLE LoanApplications
+""")
+
 cursor.execute("""
     CREATE TABLE LoanApplications (
         ApplicationID INT IDENTITY(1,1) PRIMARY KEY,
